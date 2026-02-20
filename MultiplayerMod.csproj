@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <Product>Multiplayer Mod test</Product>
+        <Version>1.0.0</Version>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <LangVersion>latest</LangVersion>
+        <RestoreAdditionalProjectSources>
+            https://api.nuget.org/v3/index.json;
+            https://nuget.bepinex.dev/v3/index.json;
+            https://nuget.samboy.dev/v3/index.json
+        </RestoreAdditionalProjectSources>
+        <PackageId>MultiplayerMod</PackageId>
+    </PropertyGroup>
+
+    <!-- BepInEx via NuGet -->
+    <ItemGroup>
+        <PackageReference Include="BepInEx.Analyzers"       Version="1.*" PrivateAssets="all" />
+        <PackageReference Include="BepInEx.Core"            Version="5.*" />
+        <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+        <PackageReference Include="UnityEngine.Modules"     Version="2021.2.16" IncludeAssets="compile" />
+    </ItemGroup>
+
+    <!--
+      Game assemblies — copy these from:
+        MonoBazou_Data/Managed/
+      into the same folder as this .csproj file.
+  
+      NWH, CMF, and UniStorm are all compiled INTO Assembly-CSharp in Mon Bazou,
+      so Assembly-CSharp.dll is the only game DLL you need here.
+      FusionModdingAPI is a separate BepInEx plugin DLL.
+    -->
+    <ItemGroup>
+        <Reference Include="Assembly-CSharp">
+            <HintPath>Assembly-CSharp.dll</HintPath>
+        </Reference>
+        <Reference Include="FusionModdingAPI">
+            <HintPath>FusionModdingAPI.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
+        <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="patches\" />
+    </ItemGroup>
+
+</Project>

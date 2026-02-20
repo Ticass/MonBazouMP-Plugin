@@ -1,0 +1,15 @@
+C:\Users\thrif\RiderProjects\Multiplayer\bin\Debug\netstandard2.0\MultiplayerMod.deps.json
+C:\Users\thrif\RiderProjects\Multiplayer\bin\Debug\netstandard2.0\MultiplayerMod.dll
+C:\Users\thrif\RiderProjects\Multiplayer\bin\Debug\netstandard2.0\MultiplayerMod.pdb
+C:\Users\thrif\RiderProjects\Multiplayer\bin\Debug\netstandard2.0\Assembly-CSharp.dll
+C:\Users\thrif\RiderProjects\Multiplayer\bin\Debug\netstandard2.0\FusionModdingAPI.dll
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.csproj.AssemblyReference.cache
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MyPluginInfo.cs
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.AssemblyInfoInputs.cache
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.AssemblyInfo.cs
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.csproj.CoreCompileInputs.cache
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.sourcelink.json
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\Multipla.49EFAF89.Up2Date
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.dll
+C:\Users\thrif\RiderProjects\Multiplayer\obj\Debug\netstandard2.0\MultiplayerMod.pdb
