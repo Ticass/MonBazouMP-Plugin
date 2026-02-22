@@ -1,240 +1,178 @@
-﻿using System;
+﻿// packets.cs — ALL packet read/write. Single source of truth.
+// No other file should manually construct byte arrays.
+using System;
+using System.Collections.Generic;
 using System.IO;
+using UnityEngine;
 
 namespace MultiplayerMod
 {
     public enum PacketType : byte
     {
-        Handshake    = 0,
-        PlayerJoin   = 1,
-        PlayerLeave  = 2,
-        PlayerMove   = 3,
-        AssignId     = 4,
-        Ping         = 5,
-        Pong         = 6,
-        CarUpdate    = 10,
-        SetTime      = 20,
+        Handshake   = 0,
+        PlayerJoin  = 1,
+        PlayerLeave = 2,
+        PlayerMove  = 3,
+        AssignId    = 4,
+        Ping        = 5,
+        Pong        = 6,
+        RoleAssign  = 7,
+        VehicleState = 10,
+        TimeSync     = 20,
         SleepRequest = 21,
-        TimeSync     = 22,
     }
 
+    public enum PlayerRole : byte { Host = 0, Guest = 1 }
+
+    // =========================================================================
+    // Writer
+    // =========================================================================
     public static class PacketWriter
     {
-        public static byte[] WriteHandshake(string playerName)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.Handshake);
-            bw.Write(playerName);
-            return ms.ToArray();
-        }
-
-        public static byte[] WritePlayerMove(int playerId,
-            float px, float py, float pz, float rx, float ry, float rz)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.PlayerMove);
-            bw.Write(playerId);
-            bw.Write(px); bw.Write(py); bw.Write(pz);
-            bw.Write(rx); bw.Write(ry); bw.Write(rz);
-            return ms.ToArray();
-        }
-
-        /// <param name="carType">Vehicle_Type cast to int — stable enum ID</param>
-        public static byte[] WriteCarUpdate(int playerId, int carType,
-            float px, float py, float pz,
-            float rx, float ry, float rz,
-            float speed)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.CarUpdate);
-            bw.Write(playerId);
-            bw.Write(carType);
-            bw.Write(px); bw.Write(py); bw.Write(pz);
-            bw.Write(rx); bw.Write(ry); bw.Write(rz);
-            bw.Write(speed);
-            return ms.ToArray();
-        }
-
-        public static byte[] WriteSleepRequest(float targetHour)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.SleepRequest);
-            bw.Write(targetHour);
-            return ms.ToArray();
-        }
-
-        public static byte[] WriteTimeSync(float hour)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.TimeSync);
-            bw.Write(hour);
-            return ms.ToArray();
-        }
-
-        public static byte[] WritePing(long timestamp)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.Ping);
-            bw.Write(timestamp);
-            return ms.ToArray();
-        }
-
+        // Wrap a payload with a 4-byte little-endian length prefix for framing.
         public static byte[] Frame(byte[] payload)
         {
-            var frame = new byte[4 + payload.Length];
-            BitConverter.GetBytes(payload.Length).CopyTo(frame, 0);
-            payload.CopyTo(frame, 4);
-            return frame;
+            var out_ = new byte[4 + payload.Length];
+            Buffer.BlockCopy(BitConverter.GetBytes(payload.Length), 0, out_, 0, 4);
+            Buffer.BlockCopy(payload, 0, out_, 4, payload.Length);
+            return out_;
+        }
+
+        public static byte[] WriteHandshake(string name) =>
+            Make(PacketType.Handshake, w => w.Write(name));
+
+        public static byte[] WriteAssignId(int id) =>
+            Make(PacketType.AssignId, w => w.Write(id));
+
+        public static byte[] WriteRoleAssign(PlayerRole role) =>
+            Make(PacketType.RoleAssign, w => w.Write((byte)role));
+
+        public static byte[] WritePlayerJoin(int id, string name, PlayerRole role) =>
+            Make(PacketType.PlayerJoin, w => { w.Write(id); w.Write(name); w.Write((byte)role); });
+
+        public static byte[] WritePlayerLeave(int id) =>
+            Make(PacketType.PlayerLeave, w => w.Write(id));
+
+        // On-foot: position + Y-euler only (ghosts only need yaw).
+        public static byte[] WritePlayerMove(int id, float px, float py, float pz, float yaw) =>
+            Make(PacketType.PlayerMove, w =>
+            {
+                w.Write(id);
+                w.Write(px); w.Write(py); w.Write(pz);
+                w.Write(yaw);
+            });
+
+        // Vehicle: position + quaternion rotation + linear vel + angular vel + speed + occupants.
+        // We send full quaternion (not euler) to avoid gimbal lock on flipped cars.
+        // We send angular velocity so guests can dead-reckon rotation too.
+        public static byte[] WriteVehicleState(
+            int vt,
+            Vector3 pos, Quaternion rot, Vector3 vel, Vector3 angVel,
+            float speed, int driverId, int passengerId) =>
+            Make(PacketType.VehicleState, w =>
+            {
+                w.Write(vt);
+                w.Write(pos.x);    w.Write(pos.y);    w.Write(pos.z);
+                w.Write(rot.x);    w.Write(rot.y);    w.Write(rot.z);    w.Write(rot.w);
+                w.Write(vel.x);    w.Write(vel.y);    w.Write(vel.z);
+                w.Write(angVel.x); w.Write(angVel.y); w.Write(angVel.z);
+                w.Write(speed);
+                w.Write(driverId);
+                w.Write(passengerId);
+            });
+
+        public static byte[] WriteTimeSync(int hour, int minute, int day) =>
+            Make(PacketType.TimeSync, w => { w.Write(hour); w.Write(minute); w.Write(day); });
+
+        public static byte[] WriteSleepRequest() =>
+            Make(PacketType.SleepRequest, _ => { });
+
+        public static byte[] WritePing(long ts) =>
+            Make(PacketType.Ping, w => w.Write(ts));
+
+        public static byte[] WritePong(long ts) =>
+            Make(PacketType.Pong, w => w.Write(ts));
+
+        // ── helper ───────────────────────────────────────────────────────────
+        private static byte[] Make(PacketType type, Action<BinaryWriter> fill)
+        {
+            using var ms = new MemoryStream(64);
+            using var bw = new BinaryWriter(ms);
+            bw.Write((byte)type);
+            fill(bw);
+            return ms.ToArray();
         }
     }
 
+    // =========================================================================
+    // Reader
+    // =========================================================================
     public static class PacketReader
     {
-        public static PacketType PeekType(byte[] data) => (PacketType)data[0];
+        public static PacketType PeekType(byte[] d) => (PacketType)d[0];
 
-        public static string ReadHandshake(byte[] data)
+        public static string ReadHandshake(byte[] d) =>
+            Read(d, r => r.ReadString());
+
+        public static int ReadAssignId(byte[] d) =>
+            Read(d, r => r.ReadInt32());
+
+        public static PlayerRole ReadRoleAssign(byte[] d) =>
+            Read(d, r => (PlayerRole)r.ReadByte());
+
+        public static (int id, string name, PlayerRole role) ReadPlayerJoin(byte[] d) =>
+            Read(d, r => (r.ReadInt32(), r.ReadString(), (PlayerRole)r.ReadByte()));
+
+        public static int ReadPlayerLeave(byte[] d) =>
+            Read(d, r => r.ReadInt32());
+
+        public static (int id, Vector3 pos, float yaw) ReadPlayerMove(byte[] d) =>
+            Read(d, r => (
+                r.ReadInt32(),
+                new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()),
+                r.ReadSingle()
+            ));
+
+        public struct VehicleState
         {
-            using var ms = new MemoryStream(data);
+            public int       vt;
+            public Vector3   pos;
+            public Quaternion rot;
+            public Vector3   vel;
+            public Vector3   angVel;
+            public float     speed;
+            public int       driverId;
+            public int       passengerId;
+        }
+
+        public static VehicleState ReadVehicleState(byte[] d) =>
+            Read(d, r =>
+            {
+                var s = new VehicleState();
+                s.vt         = r.ReadInt32();
+                s.pos        = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                s.rot        = new Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                s.vel        = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                s.angVel     = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                s.speed      = r.ReadSingle();
+                s.driverId   = r.ReadInt32();
+                s.passengerId = r.ReadInt32();
+                return s;
+            });
+
+        public static (int hour, int minute, int day) ReadTimeSync(byte[] d) =>
+            Read(d, r => (r.ReadInt32(), r.ReadInt32(), r.ReadInt32()));
+
+        public static long ReadPingPong(byte[] d) =>
+            Read(d, r => r.ReadInt64());
+
+        // ── helper ───────────────────────────────────────────────────────────
+        private static T Read<T>(byte[] d, Func<BinaryReader, T> parse)
+        {
+            using var ms = new MemoryStream(d);
             using var br = new BinaryReader(ms);
-            br.ReadByte();
-            return br.ReadString();
-        }
-
-        public static (int id, float px, float py, float pz,
-                        float rx, float ry, float rz) ReadPlayerMove(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            int id = br.ReadInt32();
-            return (id,
-                br.ReadSingle(), br.ReadSingle(), br.ReadSingle(),
-                br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-        }
-
-        public static (int playerId, int carType,
-                        float px, float py, float pz,
-                        float rx, float ry, float rz,
-                        float speed) ReadCarUpdate(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            int pid   = br.ReadInt32();
-            int ctype = br.ReadInt32();
-            float px = br.ReadSingle(), py = br.ReadSingle(), pz = br.ReadSingle();
-            float rx = br.ReadSingle(), ry = br.ReadSingle(), rz = br.ReadSingle();
-            float sp = br.ReadSingle();
-            return (pid, ctype, px, py, pz, rx, ry, rz, sp);
-        }
-
-        public static float ReadSetTime(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            return br.ReadSingle();
-        }
-
-        public static float ReadSleepRequest(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            return br.ReadSingle();
-        }
-
-        public static long ReadPingPong(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            return br.ReadInt64();
-        }
-
-        public static byte[] WriteAssignId(int id)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.AssignId);
-            bw.Write(id);
-            return ms.ToArray();
-        }
-
-        public static int ReadAssignId(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            return br.ReadInt32();
-        }
-
-        public static byte[] WritePlayerJoin(int id, string name)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.PlayerJoin);
-            bw.Write(id);
-            bw.Write(name);
-            return ms.ToArray();
-        }
-
-        public static (int id, string name) ReadPlayerJoin(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            return (br.ReadInt32(), br.ReadString());
-        }
-
-        public static byte[] WritePlayerLeave(int id)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.PlayerLeave);
-            bw.Write(id);
-            return ms.ToArray();
-        }
-
-        public static int ReadPlayerLeave(byte[] data)
-        {
-            using var ms = new MemoryStream(data);
-            using var br = new BinaryReader(ms);
-            br.ReadByte();
-            return br.ReadInt32();
-        }
-
-        public static byte[] WritePong(long timestamp)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.Pong);
-            bw.Write(timestamp);
-            return ms.ToArray();
-        }
-
-        public static byte[] WriteSetTime(float hour)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.SetTime);
-            bw.Write(hour);
-            return ms.ToArray();
-        }
-
-        public static byte[] WriteTimeSync(float hour)
-        {
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
-            bw.Write((byte)PacketType.TimeSync);
-            bw.Write(hour);
-            return ms.ToArray();
+            br.ReadByte(); // consume type byte
+            return parse(br);
         }
     }
 }
