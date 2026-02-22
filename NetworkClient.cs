@@ -142,11 +142,8 @@ namespace MultiplayerMod
             var pos = LocalPlayerTracker.Position;
             var rot = LocalPlayerTracker.Rotation;
 
-            // Only skip if the tracker hasn't polled yet at all (IsReady would be
-            // false in that case, but double-check magnitude to catch edge cases
-            // where the tracker reports ready before the first real poll completes).
-            // Note: we do NOT skip Vector3.zero — it is a valid world position.
-            if (!LocalPlayerTracker.IsReady) return;
+            // Sanity check — don't send 0,0,0 until tracker has real data
+            if (pos == Vector3.zero) return;
 
             SendRaw(PacketWriter.WritePlayerMove(
                 LocalPlayerId,
@@ -281,7 +278,9 @@ namespace MultiplayerMod
                 case PacketType.TimeSync:
                 {
                     var h = PacketReader.ReadSetTime(data);
-                    _worldState.ApplyServerTime(h, instantSnap: false);
+                    // Use instantSnap:true — the server only sends this every 30s so
+                    // there's no jitter risk, and we always want the correction applied.
+                    _worldState.ApplyServerTime(h, instantSnap: true);
                     break;
                 }
 

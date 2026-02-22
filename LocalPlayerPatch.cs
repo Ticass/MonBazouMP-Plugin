@@ -1,5 +1,6 @@
 using FusionModdingAPI.Module;
 using NWH;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MultiplayerMod
@@ -10,13 +11,17 @@ namespace MultiplayerMod
         public static Vector3    Rotation    { get; private set; }
         public static bool       IsReady     { get; private set; }
 
-        // Car state — uses Vehicle_Type as the stable car ID since
-        // GetInstanceID() is not stable across scene loads but Vehicle_Type is an enum
-        public static bool         IsInCar      { get; private set; }
+        // Car state for the vehicle the LOCAL player is currently driving
+        public static bool         IsInCar        { get; private set; }
         public static Vehicle_Type CurrentCarType { get; private set; } = Vehicle_Type.Useless;
-        public static Vector3      CarPosition  { get; private set; }
-        public static Quaternion   CarRotation  { get; private set; }
-        public static float        CarSpeed     { get; private set; }
+        public static Vector3      CarPosition    { get; private set; }
+        public static Quaternion   CarRotation    { get; private set; }
+        public static float        CarSpeed       { get; private set; }
+
+        // All vehicles in the scene — used to broadcast parked car positions
+        // so remote players see cars where we left them even when we're on foot.
+        public static IReadOnlyList<NWH.Vehicle> AllVehicles => _allVehicles;
+        private static readonly List<NWH.Vehicle> _allVehicles = new();
 
         public static void Poll()
         {
@@ -24,16 +29,22 @@ namespace MultiplayerMod
             var gameplay = Game.Gameplay;
             if (gameplay == null) { IsReady = false; return; }
 
-            // Gameplay.vehicleController is the NWH.Vehicle the player is in
-            var vehicle = gameplay.Get_CurrentVehicleController; // returns NWH.Vehicle
+            // Use the API's canonical vehicle array — covers all types including buggy.
+            _allVehicles.Clear();
+            var apiVehicles = FusionModdingAPI.Module.Vehicle.Vehicles;
+            if (apiVehicles != null)
+                foreach (var v in apiVehicles)
+                    if (v != null) _allVehicles.Add(v);
+
+            // Vehicle the local player is currently driving (same source as API)
+            var vehicle = FusionModdingAPI.Module.Vehicle.CurrentVehicle;
             if (vehicle != null)
             {
                 IsInCar        = true;
                 CurrentCarType = vehicle.vehicle_type;
-
                 var t = vehicle.vehicleTransform;
-                Position   = t.position;
-                Rotation   = t.eulerAngles;
+                Position    = t.position;
+                Rotation    = t.eulerAngles;
                 CarPosition = t.position;
                 CarRotation = t.rotation;
                 CarSpeed    = vehicle.Speed;

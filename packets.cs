@@ -67,6 +67,15 @@ namespace MultiplayerMod
             return ms.ToArray();
         }
 
+        public static byte[] WriteTimeSync(float hour)
+        {
+            using var ms = new MemoryStream();
+            using var bw = new BinaryWriter(ms);
+            bw.Write((byte)PacketType.TimeSync);
+            bw.Write(hour);
+            return ms.ToArray();
+        }
+
         public static byte[] WritePing(long timestamp)
         {
             using var ms = new MemoryStream();

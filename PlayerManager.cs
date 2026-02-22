@@ -61,6 +61,9 @@ namespace MultiplayerMod
         public string GetName(int id) =>
             _remotePlayers.TryGetValue(id, out var p) ? p.Name : $"Player#{id}";
 
+        public RemotePlayer GetPlayer(int id) =>
+            _remotePlayers.TryGetValue(id, out var p) ? p : null;
+
         public int Count => _remotePlayers.Count;
 
         public IEnumerable<RemotePlayer> All => _remotePlayers.Values;
@@ -138,6 +141,11 @@ namespace MultiplayerMod
         public GameObject RootObject          { get; }
         public bool       HasReceivedPosition { get; set; }
 
+        // When true the ghost is parented inside a car — Tick() must NOT move it
+        // because the car transform already carries it. Moving it in world space
+        // while parented causes the rubber-band-to-origin bug.
+        public bool IsSeated { get; set; }
+
         public Vector3    TargetPosition;
         public Quaternion TargetRotation = Quaternion.identity;
 
@@ -152,6 +160,10 @@ namespace MultiplayerMod
         public void Tick()
         {
             if (RootObject == null || !HasReceivedPosition) return;
+
+            // If seated inside a car the parent transform moves us — don't fight it.
+            if (IsSeated) return;
+
             var t = RootObject.transform;
             t.position = Vector3.Lerp(t.position, TargetPosition, Time.deltaTime * LERP_POS);
             t.rotation = Quaternion.Slerp(t.rotation, TargetRotation, Time.deltaTime * LERP_ROT);
